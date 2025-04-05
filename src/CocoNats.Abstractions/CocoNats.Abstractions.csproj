@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="NATS.NET" Version="2.5.12" />
+  </ItemGroup>
+
 </Project>
