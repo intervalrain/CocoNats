@@ -1,0 +1,170 @@
+@page "/Contacts"
+@using CocoNats.Sample.Shared.Contacts
+@using NATS.Client.Core
+
+@inject NatsConnection NatsConnection
+
+<PageTitle>Contacts</PageTitle>
+
+<h1>Contacts</h1>
+
+<p>This component demonstrates CRUD operations for contacts.</p>
+
+<button class="btn btn-primary" @onclick="() => ShowContactForm(null)">Add New Contact</button>
+
+@if (_contacts == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table mt-4">
+        <thead>
+            <tr>
+                <th>Sex</th>
+                <th>Name</th>
+                <th>Address</th>
+                <th>Phone</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var contact in _contacts)
+            {
+                <tr>
+                    <td>@contact.Sex.ToString()</td>
+                    <td>@contact.Name</td>
+                    <td>@contact.Address</td>
+                    <td>@contact.Phone</td>
+                    <td>
+                        <button class="btn btn-sm btn-info" @onclick="() => ShowContactForm(contact)">Edit</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteContact(contact.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (showForm)
+{
+    <div class="modal" style="display:block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(currentContact?.Id == Guid.Empty ? "Add New Contact" : "Edit Contact")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="@currentContact" OnValidSubmit="HandleValidSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+                        <div class="mb-3">
+                            <label for="sex" class="form-label">Sex</label>
+                            <InputSelect id="sex" class="form-control" @bind-Value="currentContact.Sex">
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                            </InputSelect>
+                        </div>
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Name</label>
+                            <InputText id="name" class="form-control" @bind-Value="currentContact.Name" />
+                        </div>
+                        <div class="mb-3">
+                            <label for="address" class="form-label">Address</label>
+                            <InputText id="address" class="form-control" @bind-Value="currentContact.Address" />
+                        </div>
+                        <div class="mb-3">
+                            <label for="phone" class="form-label">Phone</label>
+                            <InputText id="phone" class="form-control" @bind-Value="currentContact.Phone" />
+                        </div>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private List<ContactDto>? _contacts;
+    private bool showForm = false;
+    private ContactDto? currentContact;
+    private bool isEditMode = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadContacts();
+    }
+
+    private async Task LoadContacts()
+    {
+        var response = await NatsConnection.RequestAsync<object, List<ContactDto>>("contact.get", new object());
+        _contacts = response.Data;
+    }
+
+    private void ShowContactForm(ContactDto? contact)
+    {
+        if (contact == null)
+        {
+            currentContact = new ContactDto();
+            isEditMode = false;
+        }
+        else
+        {
+            currentContact = new ContactDto
+            {
+                Id = contact.Id,
+                Sex = contact.Sex,
+                Name = contact.Name,
+                Address = contact.Address,
+                Phone = contact.Phone
+            };
+            isEditMode = true;
+        }
+        showForm = true;
+    }
+
+    private void CloseForm()
+    {
+        showForm = false;
+        currentContact = new ContactDto();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        var request = new CreateUpdateContactDto
+        {
+            Sex = currentContact.Sex,
+            Name = currentContact.Name,
+            Address = currentContact.Address,
+            Phone = currentContact.Phone
+        };
+
+        if (isEditMode)
+        {
+            await NatsConnection.RequestAsync<CreateUpdateContactDto, ContactDto>(
+                $"contact.put.{currentContact.Id}", 
+                request);
+        }
+        else
+        {
+            await NatsConnection.RequestAsync<CreateUpdateContactDto, ContactDto>(
+                $"contact.post", 
+                request);
+        }
+
+        showForm = false;
+        await LoadContacts();
+    }
+
+    private async Task DeleteContact(Guid id)
+    {
+        await NatsConnection.RequestAsync<object, bool>(
+            $"contact.delete.{id}", 
+            new object());
+        await LoadContacts();
+    }
+}

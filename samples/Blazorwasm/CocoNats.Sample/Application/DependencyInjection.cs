@@ -1,5 +1,7 @@
 using Application.Books.Books.Domain;
 using Application.Books.Books.Infrastructure.Persistence;
+using Application.Contacts.Domain;
+using Application.Contacts.Infrastructure.Persistence;
 using Application.WeatherForecasts;
 
 using CocoNats.Core;
@@ -21,6 +23,7 @@ public static class DependencyInjection
     public static IServiceCollection AddPersistence(this IServiceCollection services)
     {
         services.AddSingleton<IBookRepository, InMemoryBookRepository>();
+        services.AddSingleton<IContactRepository, InMemoryContactRepository>();
 
         return services;
     }
