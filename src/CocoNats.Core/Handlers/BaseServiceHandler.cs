@@ -102,14 +102,31 @@ public abstract class BaseServiceHandler<TService>(
         _logger.LogInformation("Creating subscription for subject: {Subject}", subject);
         var parameters = method.GetParameters();
 
-        var requestType = parameters.Length > 0
-            ? parameters[0].ParameterType.IsGenericType && parameters[0].ParameterType.GetGenericTypeDefinition() == typeof(NatsMsg<>)
-            ? parameters[0].ParameterType.GenericTypeArguments[0]
-            : parameters[0].ParameterType
-            : typeof(Request);
-        var responseType = method.ReturnType.IsGenericType && method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>)
-            ? method.ReturnType.GetGenericArguments()[0]
-            : method.ReturnType;
+        Type requestType;
+        if (parameters.Length == 0)
+        {
+            requestType = typeof(Request);
+        }
+        else
+        {
+            requestType = parameters[0].ParameterType.IsGenericType && parameters[0].ParameterType.GetGenericTypeDefinition() == typeof(NatsMsg<>)
+                        ? parameters[0].ParameterType.GenericTypeArguments[0]
+                        : parameters[0].ParameterType;
+        }
+        Type? responseType;
+        if (method.ReturnType.IsGenericType && method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>))
+        {
+            responseType = method.ReturnType.GetGenericArguments()[0];
+        }
+        else if (method.ReturnType == typeof(Task))
+        {
+            responseType = typeof(object);
+        }
+        else
+        {
+            responseType = method.ReturnType;
+        }
+
 
         var subscribeMethod = typeof(BaseServiceHandler<TService>)
             .GetMethod(nameof(SubscribeToSubject), BindingFlags.NonPublic | BindingFlags.Instance)
@@ -122,6 +139,7 @@ public abstract class BaseServiceHandler<TService>(
         where TRequest : class
     {
         var useNatsMsg = IsNatsMsgUsed(method);
+        var hasParameters = method.GetParameters().Length > 0;
 
         await foreach (var msg in _connection.SubscribeAsync<TRequest>(subject, cancellationToken: cancellationToken))
         {
@@ -130,11 +148,23 @@ public abstract class BaseServiceHandler<TService>(
                 using var scope = ServiceProvider.CreateScope();
                 var serviceInstance = scope.ServiceProvider.GetRequiredService<TService>();
 
-                var parameters = useNatsMsg
-                    ? [msg]
-                    : msg.Data != null
-                    ? [msg.Data]
-                    : (object?[])[Activator.CreateInstance<TRequest>()];
+                object?[] parameters;
+                if (!hasParameters)
+                {
+                    parameters = [];
+                }
+                else if (useNatsMsg)
+                {
+                    parameters = [msg];
+                }
+                else if (msg.Data != null)
+                {
+                    parameters = [msg.Data];
+                }
+                else
+                {
+                    parameters = [Activator.CreateInstance<TRequest>()];
+                }
 
                 object? result = null;
                 if (method.ReturnType.IsGenericType && method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>))
@@ -145,9 +175,14 @@ public abstract class BaseServiceHandler<TService>(
                     var resultProperty = task.GetType().GetProperty("Result");
                     result = resultProperty?.GetValue(task);
                 }
+                else if (method.ReturnType == typeof(Task))
+                {
+                    var task = (Task)method.Invoke(serviceInstance, parameters)!;
+                    await task;
+                }
                 else
                 {
-                    method.Invoke(serviceInstance, parameters);
+                    result = method.Invoke(serviceInstance, parameters);
                 }
 
                 if (result != null)

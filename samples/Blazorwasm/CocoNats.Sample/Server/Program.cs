@@ -1,43 +1,82 @@
-using System.Reflection;
-
 using Application;
-using CocoNats.Core;
+
 using NATS.Client.Hosting;
 using NATS.Client.Serializers.Json;
 
-var builder = WebApplication.CreateBuilder(args);
+using Serilog;
+using Serilog.Events;
 
-builder.Services.AddControllersWithViews();
-builder.Services.AddRazorPages();
+namespace CocoNats.Sample.Server;
 
-#region Add Nats Service
-// add nats configuration
-builder.Services.AddNats(configureOpts: opt => opt with
+public class Program
 {
-    SerializerRegistry = NatsJsonSerializerRegistry.Default,
-    Url = "localhost:4222",
-    Name = "BlazorServer"
-});
+    public static int Main(string[] args)
+    {
+        Log.Logger = new LoggerConfiguration()
+            .WriteTo.Async(c => c.Console())
+            .CreateBootstrapLogger();
 
-// add application services
-builder.Services.AddApplication();
-#endregion
+        try
+        {
+            Log.Information("Starting blazor server...");
+            var builder = WebApplication.CreateBuilder(args);
+            builder.Host.UseSerilog((context, services, loggerConfiguration) =>
+            {
+                loggerConfiguration
+                #if DEBUG
+                    .MinimumLevel.Debug()
+                #else
+                    .MinimumLevel.intformation()
+                #endif
+                    .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+                    .Enrich.FromLogContext()
+                    .WriteTo.Async(c => c.Console());
+            });
 
-var app = builder.Build();
+            builder.Services.AddControllersWithViews();
+            builder.Services.AddRazorPages();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseWebAssemblyDebugging();
+            #region Add Nats Service
+            // add nats configuration
+            builder.Services.AddNats(configureOpts: opt => opt with
+            {
+                SerializerRegistry = NatsJsonSerializerRegistry.Default,
+                Url = "localhost:4222",
+                Name = "BlazorServer"
+            });
+
+            // add application services
+            builder.Services.AddApplication();
+            #endregion
+
+            var app = builder.Build();
+
+            if (app.Environment.IsDevelopment())
+            {
+                app.UseWebAssemblyDebugging();
+            }
+            else
+            {
+                app.UseExceptionHandler("/Error");
+            }
+
+            app.UseBlazorFrameworkFiles();
+            app.UseStaticFiles();
+            app.UseRouting();
+            app.MapRazorPages();
+            app.MapFallbackToFile("index.html");
+
+            app.Run();
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Host terminated unexpectedly");
+            return 1;
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
+    }
 }
-else
-{
-    app.UseExceptionHandler("/Error");
-}
-
-app.UseBlazorFrameworkFiles();
-app.UseStaticFiles();
-app.UseRouting();
-app.MapRazorPages();
-app.MapFallbackToFile("index.html");
-
-app.Run();
