@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="7.0.20" />
+    <PackageReference Include="NATS.NET" Version="2.5.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Client\CocoNats.Sample.Client.csproj" />
+    <ProjectReference Include="..\Shared\CocoNats.Sample.Shared.csproj" />
+    <ProjectReference Include="..\..\..\..\src\CocoNats.Core\CocoNats.Core.csproj" />
+    <ProjectReference Include="..\Application\Application.csproj" />
+  </ItemGroup>
+
+
+</Project>
